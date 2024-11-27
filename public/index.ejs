@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>
+        <%= title %>
+    </title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&family=Funnel+Display:wght@300..800&family=Playwrite+NZ:wght@100..400&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.maptiler.com/maptiler-sdk-js/v2.3.0/maptiler-sdk.umd.js"></script>
+    <link href="https://cdn.maptiler.com/maptiler-sdk-js/v2.3.0/maptiler-sdk.css" rel="stylesheet" />
+    <script src="https://cdn.maptiler.com/leaflet-maptilersdk/v2.0.0/leaflet-maptilersdk.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+</head>
+
+<body>
+    <nav class="flex justify-center items-center p-4 bg-black text-white h-20">
+        <h1>Realtime Location Map</h1>
+    </nav>
+
+    <main class="grid lg:grid-cols-2 grid-cols-1">
+        <div class="mx-2 md:mx-0 lg:mx-0 xl:mx-0" id="map"></div>
+        <div class="px-5 py-2" id="stats">
+            <div class="grid grid-cols-2 gap-x-2">
+                <div class="border border-slate-400 rounded-lg shadow-md">
+                    <div class="bg-indigo-400 rounded-t-md py-2 px-2 flex justify-center items-center">
+                        <h1>Your Geo Data:</h1>
+                    </div>
+                    <div class="p-4">
+                        <p id="stLat">latitude:</p>
+                        <p id="stLong">longitude:</p>
+                        <p id="">speed: 0 m/s</p>
+                        <p id="">accuracy: 90%(+/-)</p>
+                        <p id="">heading: 0 deg</p>
+                    </div>
+                </div>
+                <div class="border border-slate-400 rounded-lg shadow-md">
+                    <div class="bg-indigo-400 rounded-t-md py-2 px-2 flex justify-center items-center">
+                        <h1>Vehicle Geo Data:</h1>
+                    </div>
+                    <div class="p-4">
+                        <p id="busLat">latitude:</p>
+                        <p id="busLong">longitude:</p>
+                        <p id="busSpeed">speed: 0 m/s</p>
+                        <p id="">accuracy: 90%(+/-)</p>
+                        <p id="">heading: 0 deg</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-gradient-to-r from-indigo-400 via-sky-300 to-emerald-400 p-1 rounded-xl mt-5">
+                <div class="h-72 rounded-lg bg-white px-3 pt-4 mb-1 flex flex-col justify-between">
+                    <div>
+                        <h1 class="text-lg">Emit Bus Location:</h1>
+                        <p class="py-2" id="busText"></p>
+                    </div>
+                    <div id="viewBusStats">
+                        <p id="statLat">latitude:</p>
+                        <p id="statLong">longitude:</p>
+                        <p id="busSpeed">speed: 0 m/s</p>
+                        <p id="">accuracy: 90%(+/-)</p>
+                        <p id="">heading: 0 deg</p>
+                    </div>
+                    <button class="border border-slate-900 bg-indigo-400 px-3 py-2 rounded-md mt-auto w-full mb-2"
+                        id="bus">Emit
+                        Location</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+
+
+</body>
+
+</html>
+<script>
+    let latFromServer, langFromServer;
+    let beBus = false;
+    const socket = io();
+    const msg = document.getElementById("sendMessage")
+    const msgDiv = document.getElementById("msg");
+    const statistics = document.getElementById("stats");
+    const li = document.createElement('li');
+    const bus = document.getElementById("bus");
+    const busText = document.getElementById("busText")
+
+    if (navigator.geolocation) {
+
+
+        navigator.geolocation.watchPosition((position) => {
+            const { latitude, longitude,
+                accuracy, altitude, heading, speed
+
+
+            } = position.coords;
+
+            bus.addEventListener("click", () => {
+                beBus = !beBus;
+                if (beBus == true) {
+                    busText.innerText = 'Emitting bus location coordinates..'
+                    bus.innerText = 'Stop Emitting'
+                } else {
+                    busText.innerText = ""
+                    bus.innerText = 'Emit Location'
+
+                }
+            })
+
+            console.log('Toggle user:', beBus)
+            if (beBus == true) {
+                socket.emit('location', { latitude, longitude, beBus, accuracy, heading, speed })
+            } else {
+                socket.emit('location', { latitude, longitude, accuracy, heading, speed, beBus })
+            }
+
+        }, (error) => {
+            console.error(error)
+        }, {
+            enableHighAccuracy: true
+        });
+    }
+
+    const userMarker = L.icon({
+        iconUrl: '/assets/user.png',
+        iconSize: [50, 50],
+        iconAnchor: [22, 94],
+        shadowAnchor: [4, 62],
+        popupAnchor: [-3, -76]
+    });
+
+    const busMarker = L.icon({
+        iconUrl: '/assets/bus-stop.png',
+        iconSize: [50, 50],
+        iconAnchor: [22, 94],
+        shadowAnchor: [4, 62],
+        popupAnchor: [-3, -76]
+    });
+
+    const key = 'B2YJmNNxhMAGXcYTIf4y';
+    let map = L.map('map').setView([22.3384, 91.83168], 13);
+    L.tileLayer(`https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=${key}`, {
+        tileSize: 512,
+        zoomOffset: -1,
+        minZoom: 1,
+        attribution: "\u003ca href=\"https://www.maptiler.com/copyright/\" target=\"_blank\"\u003e\u0026copy; MapTiler\u003c/a\u003e \u003ca href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\"\u003e\u0026copy; OpenStreetMap contributors\u003c/a\u003e",
+        crossOrigin: true
+    }).addTo(map);
+
+
+    function updateStatistics(swtichStates, latitude, longitude) {
+        console.log('swtich', swtichStates)
+        if (swtichStates === true) {
+            document.getElementById("viewBusStats").style.visibility = 'visible'
+            document.getElementById('busLat').innerText = 'latitude: ' + latitude;
+            document.getElementById('busLong').innerText = 'longitude: ' + longitude;
+            document.getElementById('statLat').innerText = 'latitude: ' + latitude;
+            document.getElementById('statLong').innerText = 'longitude: ' + longitude;
+
+            document.getElementById('stLat').innerText = 'latitude: ';
+            document.getElementById('stLong').innerText = 'longitude: ';
+        } else if (swtichStates === false || swtichStates === undefined) {
+            document.getElementById("viewBusStats").style.visibility = 'hidden'
+            document.getElementById('stLat').innerText = 'latitude: ' + latitude;
+            document.getElementById('stLong').innerText = 'longitude: ' + longitude;
+
+            document.getElementById('busLat').innerText = 'latitude: '
+            document.getElementById('busLong').innerText = 'longitude: '
+        }
+    }
+
+    socket.on('location', (loc) => {
+        latFromServer = loc.latitude;
+        langFromServer = loc.longitude;
+        mockBusLocation = loc.beBus;
+        console.log(loc)
+        map.setView([latFromServer, langFromServer], 13);
+
+        L.marker([latFromServer, langFromServer], { icon: mockBusLocation == true ? busMarker : userMarker }).addTo(map)
+
+        updateStatistics(mockBusLocation, latFromServer, langFromServer)
+
+
+    })
+    function sendMessage() {
+
+        socket.emit("chat message", msg.value)
+        msg.value = ''
+    }
+    socket.on('chat message', (msg) => {
+        li.textContent = msg;
+        msgDiv.appendChild(li);
+    })
+</script>
+<style>
+    #map {
+        height: 700px;
+        border: 2px solid black;
+    }
+
+    #stats {
+
+        font-size: 16px;
+        font-family: "Poppins", sans-serif;
+        font-weight: 600;
+        font-style: normal;
+
+
+    }
+
+
+
+    nav>h1 {
+        font-size: 16px;
+        font-family: "Poppins", sans-serif;
+        font-weight: 600;
+        font-style: normal;
+        color: white
+    }
+</style>
